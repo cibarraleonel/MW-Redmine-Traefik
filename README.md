@@ -35,6 +35,13 @@ docker compose up -d --scale redmine=2
 - Se usan certificados autofirmados generados con OpenSSL.
 - Los archivos deben estar en la carpeta `certs/` (`local.crt` y `local.key`).
 - Traefik los utiliza para exponer los servicios por HTTPS en *.localhost.
+```bash
+# Crear directorio y claves
+    mkdir -p certs
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout certs/local.key -out certs/local.crt \
+    -subj "/CN=*.localhost"
+```
 
 ## Sitios de Acceso
 
