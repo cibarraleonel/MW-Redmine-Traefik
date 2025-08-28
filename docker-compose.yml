@@ -1,0 +1,100 @@
+services:
+  traefik:
+    image: traefik:v3.0
+    container_name: traefik
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./certs:/certs:ro"
+      - "./dynamic:/etc/traefik/dynamic:ro"
+    networks:
+      - proxy_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.traefik-dashboard.rule=Host(`traefik.localhost`)"
+      - "traefik.http.routers.traefik-dashboard.entrypoints=websecure"
+      - "traefik.http.routers.traefik-dashboard.service=api@internal"
+      - "traefik.http.routers.traefik-dashboard.tls=true"
+
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+      MYSQL_DATABASE: redmine_db
+      MYSQL_USER: redmine_user
+      MYSQL_PASSWORD: redmine_password
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - proxy_net
+
+  redmine:
+    image: redmine:latest
+    deploy:
+      replicas: 2
+    environment:
+      REDMINE_DB_MYSQL: mysql
+      REDMINE_DB_USERNAME: redmine_user
+      REDMINE_DB_PASSWORD: redmine_password
+      REDMINE_DB_DATABASE: redmine_db
+    volumes:
+      - redmine_files:/usr/src/redmine/files
+      - ./redmine_config/configuration.yml:/usr/src/redmine/config/configuration.yml
+    networks:
+      - proxy_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.redmine.rule=Host(`redmine.localhost`)"
+      - "traefik.http.routers.redmine.entrypoints=websecure"
+      - "traefik.http.routers.redmine.tls=true"
+      - "traefik.http.services.redmine.loadbalancer.server.port=3000"
+      - "traefik.http.services.redmine.loadbalancer.sticky.cookie=true"
+
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: phpmyadmin
+    depends_on:
+      - mysql
+    environment:
+      PMA_HOST: mysql
+    networks:
+      - proxy_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.pma.rule=Host(`pma.localhost`)"
+      - "traefik.http.routers.pma.entrypoints=websecure"
+      - "traefik.http.routers.pma.tls=true"
+      - "traefik.http.services.pma.loadbalancer.server.port=80"
+
+  maildev:
+    image: maildev/maildev:latest
+    container_name: maildev
+    networks:
+      - proxy_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.maildev.rule=Host(`maildev.localhost`)"
+      - "traefik.http.routers.maildev.entrypoints=websecure"
+      - "traefik.http.routers.maildev.tls=true"
+      - "traefik.http.services.maildev.loadbalancer.server.port=1080"
+
+volumes:
+  mysql_data:
+  redmine_files:
+
+networks:
+  proxy_net:
+    name: proxy_net
